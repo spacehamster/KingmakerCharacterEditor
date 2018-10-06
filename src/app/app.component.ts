@@ -168,6 +168,8 @@ export class AppComponent {
         /player\.m_QuestBook\..*\.m_IsInUiSelected/,
         /player\.PartyCharacters\.\d+\.m_UniqueId/,
         /player\.m_MainCharacter\.m_UniqueId/,
+        /party\.m_EntityData\.\d+\.m_SavedRagdoll\.m_BoneData.*/,
+
 
       ]
       let current = this.flatten({party:this.party, player:this.player});
