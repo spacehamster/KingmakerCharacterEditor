@@ -10,6 +10,7 @@ import { Blueprints } from './blueprints';
 export class AppComponent {
   player: any = {Money: null, m_EntityData: null};
   party: any = {m_EntityData: null};
+  header: any = {};
   stats: string[] = ["Strength","Dexterity","Constitution","Intelligence","Wisdom","Charisma","Speed","Reach"];
   dialog = window['electron'].remote.dialog;
   fs = window['electron'].remote.require('fs');
@@ -34,6 +35,7 @@ export class AppComponent {
   saveFile() {
     this.zipfile.file('player.json',JSON.stringify(this.serializeReferences(this.player)));
     this.zipfile.file('party.json',JSON.stringify(this.serializeReferences(this.party)));
+    this.zipfile.file('header.json',JSON.stringify(this.serializeReferences(this.header)));
     var data = this.zipfile.generate({base64: false, compression: 'DEFLATE'});
     this.fs.writeFileSync(this.filename,data,'binary');
   }
@@ -62,11 +64,134 @@ export class AppComponent {
   }
   getItems()  {
     let results = [];
+    if(!this.party) return results;
     for(let item of this.party.m_EntityData[0].Descriptor.m_Inventory.m_Items){
       let name = item.m_Blueprint in Blueprints.Items ? Blueprints.Items[item.m_Blueprint] : item.m_Blueprint
       results.push({name:name, count:item.m_Count});
     }
     return results;
+  }
+  loadFile(callback){
+    var options: any = {filters: [{name: 'Kingmaker Save File', extensions: ['zks'] }],
+        properties: ['openFile','treatPackageAsDirectory', 'showHiddenFiles'],
+        defaultPath: ''};
+    if (window['process'].platform == 'win32')
+      options.defaultPath = '%LOCALAPPDATA%\\..\\LocalLow\\Owlcat Games\\Pathfinder Kingmaker\\Saved Games\\'
+    if (window['process'].platform == 'darwin')
+      options.defaultPath = '~/Library/Application Support/unity.Owlcat Games.Pathfinder Kingmaker/Saved Games/';
+    this.dialog.showOpenDialog(null,options, (fileNames) =>{
+      if (fileNames === undefined) return;
+      this.filename = fileNames[0];
+      var data = this.fs.readFileSync(this.filename, 'binary');
+      this.zipfile = new this.zip(data);
+      var partyString = this.zipfile.files['party.json'].asText();
+      if (partyString.charCodeAt(0) == 65279)
+        partyString = partyString.substring(1);
+      let  party = this.resolveReferences(partyString);
+      var playerString = this.zipfile.files['player.json'].asText();
+      if (playerString.charCodeAt(0) == 65279)
+        playerString = playerString.substring(1);
+      let player = this.resolveReferences(playerString);
+      let result = {player:player, party:party};
+      if(callback) callback(result);
+    });
+  }
+  flatten(parent, path?, results?, seen?){
+    //Important to do a bfs on object rather then a dfs
+    if(seen == null) {
+      seen = new Set();
+      seen.add(parent);
+    }
+    if(results == null) results = {};
+    if(path == null) path = '';
+    let to_check = [[parent, '']];
+    while(to_check.length > 0){
+      let obj = to_check[0][0];
+      let path = to_check[0][1];
+      to_check = to_check.splice(1);
+      for(let key in obj){
+        let child = obj[key];
+        let childPath = path == '' ? key : path + "." + key;
+        results[childPath] = child;
+        if(typeof child !== 'object' || !child) continue; //a primitive
+        if(seen.has(child)) continue;
+        seen.add(child);
+        to_check.push([child, childPath]);
+        //this.flatten(child, childPath, results, seen);
+      }
+    }
+    return results;
+  }
+  shallowCompare (x, y, compareChildren?) {
+    if(typeof x !== typeof y) return false;
+    if(!x != !y) return false //check for null
+    if (typeof x !== 'object') // a primitive value
+      return x == y;
+    if(compareChildren == null) compareChildren = true;
+    if(!compareChildren) return true;
+    for(let key in x){
+      if(!(key in y)) return false;
+      if(!this.shallowCompare(x[key], y[key], false)) return false;
+    }
+    for(let key in y){
+      if(!(key in x)) return false;
+    }
+    return true;
+  }
+  compareFile(){
+    this.loadFile((saveFile) => {
+      let filters = [
+        /party\.m_EntityData\.\d+.Position\..*/,
+        /party\.m_EntityData\.\d+.m_Position\..*/,
+        /party\.m_EntityData\.\d+.m_Orientation/,
+        /party\.m_EntityData\.\d+.LastMoveTime/,
+        /party\.m_EntityData\.\d+.DesiredOrientation/,
+        /party\.m_EntityData\.\d+.TimeToNextRoundTick/,
+        /party\.m_EntityData\.\d+.m_TimeToNextRound/,
+        /party\.m_EntityData\.\d+.m_Rotation/,
+        /party\.m_EntityData\.\d+.PreviousPosition\..*/,
+        /party\.m_EntityData\.\d+.m_UnitsInside\..*/,
+        /player\.GameTime/,
+        /player\.RealTime/,
+        /player\.m_CameraPos\..*/,
+        /player\.Weather\..*/,
+        /.*\.TimeToNextRound/,
+        /.*\.RoundNumber/,
+        /.*\.NextTickTime/,
+
+        /party\.m_EntityData\.\d+.Descriptor\.Buffs\..*/,
+        /party\.m_EntityData\.\d+\.Descriptor\.Alignment\..*/,
+        /.*\.m_CasterReference\.m_UniqueId/,
+
+        /player\.m_QuestBook\..*\.m_NeedToAttention/,
+        /player\.m_QuestBook\..*\.m_ObjectiveStartTime/,
+        /player\.m_QuestBook\..*\.m_IsInUiSelected/,
+        /player\.PartyCharacters\.\d+\.m_UniqueId/,
+        /player\.m_MainCharacter\.m_UniqueId/,
+
+      ]
+      let current = this.flatten({party:this.party, player:this.player});
+      let changed = this.flatten(saveFile);
+      let diff = {};
+      for(let key in current){
+        if(key.endsWith('$id')) continue;
+        if(!(key in changed)) diff[key] = [current[key], 'NoKey'];
+        else if (!this.shallowCompare(current[key], changed[key], false)) diff[key] = [current[key], changed[key]];
+      }
+      for(let key in changed){
+        if(key.endsWith('$id')) continue;
+        if(!(key in current)) diff[key] = ["NoKey", changed[key]];
+      }
+      for(let key of Object.keys(diff).sort()){
+        let parentPathArr = key.split('.');
+        let parentPath = parentPathArr.slice(0, parentPathArr.length - 1).join('.');
+        if(parentPath in diff) continue;
+        if(filters.some((re) => re.test(key))) continue;
+        let first = diff[key][0] == null ? 'null' : diff[key][0];
+        let second = diff[key][1] == null ? 'null' : diff[key][1];
+        console.log(key, first, second);
+      }
+    });
   }
 
   getDoll(character){
@@ -85,7 +210,12 @@ export class AppComponent {
     }
     return results;
   }
-
+  getVoice(character){
+    if(character.Descriptor.CustomAsks in Blueprints.Voices){
+      return Blueprints.Voices[character.Descriptor.CustomAsks];
+    }
+    return character.Descriptor.CustomAsks;
+  }
   getPortrait(character){
     if(character.Descriptor.UISettings.m_CustomPortrait){
         //m_CustomPortraitId refers to the folder containing the custom portrait in the Portraits folder
@@ -131,7 +261,14 @@ export class AppComponent {
     if(blueprintHash in Blueprints.Features) return Blueprints.Features[blueprintHash];
     return blueprintHash;
   }
-
+  fixNPC(){
+    for(let i = 1; i < this.party.m_EntityData.length; i++){
+      let descriptor = this.party.m_EntityData[i].Descriptor;
+      descriptor.UISettings.m_Portrait = null;
+      descriptor.Doll = null;
+      descriptor.CustomAsks = null;
+    }
+  }
   resetCharacter(character) {
     if(character == this.party.m_EntityData[0]){
       const baseStats = `{"$id":"5349","HitPoints":{"$id":"5350","m_BaseStat":"Constitution","m_Stats":{"$ref":"5349"},"m_BaseStatModifier":null,"Type":"HitPoints","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},"TemporaryHitPoints":{"$id":"5351","Type":"TemporaryHitPoints","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},"AC":{"$id":"5352","m_Stats":{"$ref":"5349"},"m_DexBonusLimiters":null,"m_DexBonus":{"$id":"5353","ModDescriptor":"DexterityBonus","StackMode":"Default","ModValue":0,"Source":null,"SourceComponent":null,"ItemSource":null},"Type":"AC","m_BaseValue":10,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":10,"PersistentModifierList":[{"$ref":"5353"},{"$id":"5354","ModDescriptor":"Size","StackMode":"Default","ModValue":0,"Source":null,"SourceComponent":null,"ItemSource":null}]},"AdditionalAttackBonus":{"$id":"5355","Type":"AdditionalAttackBonus","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":[{"$id":"5356","ModDescriptor":"Size","StackMode":"Default","ModValue":0,"Source":null,"SourceComponent":null,"ItemSource":null}]},"AdditionalDamage":{"$id":"5357","Type":"AdditionalDamage","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},"BaseAttackBonus":{"$id":"5358","Type":"BaseAttackBonus","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},"AttackOfOpportunityCount":{"$id":"5359","Type":"AttackOfOpportunityCount","m_BaseValue":1,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":1,"PersistentModifierList":null},"Speed":{"$id":"5360","Type":"Speed","m_BaseValue":30,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":30,"PersistentModifierList":null},"Charisma":{"$id":"5361","m_Disabled":{"$id":"5362","m_Count":0},"Type":"Charisma","m_BaseValue":10,"m_Dependents":[{"$id":"5363","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueSkill, Assembly-CSharp","BaseStat":{"$ref":"5361"},"ClassSkill":{"$id":"5364","m_Count":0},"Type":"SkillPersuasion","m_BaseValue":0,"m_Dependents":[{"$id":"5365","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueDependant, Assembly-CSharp","BaseStat":{"$ref":"5363"},"Type":"CheckBluff","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},{"$id":"5366","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueDependant, Assembly-CSharp","BaseStat":{"$ref":"5363"},"Type":"CheckDiplomacy","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},{"$id":"5367","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueDependant, Assembly-CSharp","BaseStat":{"$ref":"5363"},"Type":"CheckIntimidate","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null}],"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},{"$id":"5368","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueSkill, Assembly-CSharp","BaseStat":{"$ref":"5361"},"ClassSkill":{"$id":"5369","m_Count":0},"Type":"SkillUseMagicDevice","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null}],"m_DependentFacts":null,"PermanentValue":10,"PersistentModifierList":null},"AdditionalCMB":{"$id":"5370","Type":"AdditionalCMB","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},"AdditionalCMD":{"$id":"5371","Type":"AdditionalCMD","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},"Constitution":{"$id":"5372","m_Disabled":{"$id":"5373","m_Count":0},"Type":"Constitution","m_BaseValue":10,"m_Dependents":[{"$ref":"5350"},{"$id":"5374","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueSavingThrow, Assembly-CSharp","BaseStat":{"$ref":"5372"},"Type":"SaveFortitude","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null}],"m_DependentFacts":null,"PermanentValue":10,"PersistentModifierList":null},"Dexterity":{"$id":"5375","m_Disabled":{"$id":"5376","m_Count":0},"Type":"Dexterity","m_BaseValue":10,"m_Dependents":[{"$ref":"5352"},{"$id":"5377","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueSavingThrow, Assembly-CSharp","BaseStat":{"$ref":"5375"},"Type":"SaveReflex","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},{"$id":"5378","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueSkill, Assembly-CSharp","BaseStat":{"$ref":"5375"},"ClassSkill":{"$id":"5379","m_Count":0},"Type":"SkillMobility","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},{"$id":"5380","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueSkill, Assembly-CSharp","BaseStat":{"$ref":"5375"},"ClassSkill":{"$id":"5381","m_Count":0},"Type":"SkillThievery","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},{"$id":"5382","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueSkill, Assembly-CSharp","BaseStat":{"$ref":"5375"},"ClassSkill":{"$id":"5383","m_Count":0},"Type":"SkillStealth","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":[{"$id":"5384","ModDescriptor":"Size","StackMode":"Default","ModValue":0,"Source":null,"SourceComponent":null,"ItemSource":null}]},{"$id":"5385","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueInitiative, Assembly-CSharp","m_Dexterity":{"$ref":"5375"},"m_DexBonus":{"$id":"5386","ModDescriptor":"DexterityBonus","StackMode":"Default","ModValue":0,"Source":null,"SourceComponent":null,"ItemSource":null},"Type":"Initiative","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":[{"$ref":"5386"}]}],"m_DependentFacts":null,"PermanentValue":10,"PersistentModifierList":null},"Intelligence":{"$id":"5387","m_Disabled":{"$id":"5388","m_Count":0},"Type":"Intelligence","m_BaseValue":10,"m_Dependents":[{"$id":"5389","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueSkill, Assembly-CSharp","BaseStat":{"$ref":"5387"},"ClassSkill":{"$id":"5390","m_Count":0},"Type":"SkillKnowledgeArcana","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},{"$id":"5391","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueSkill, Assembly-CSharp","BaseStat":{"$ref":"5387"},"ClassSkill":{"$id":"5392","m_Count":0},"Type":"SkillKnowledgeWorld","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null}],"m_DependentFacts":null,"PermanentValue":10,"PersistentModifierList":null},"Owner":{"$ref":"5"},"SaveFortitude":{"$ref":"5374"},"SaveReflex":{"$ref":"5377"},"SaveWill":{"$id":"5393","BaseStat":{"$id":"5394","m_Disabled":{"$id":"5395","m_Count":0},"Type":"Wisdom","m_BaseValue":10,"m_Dependents":[{"$ref":"5393"},{"$id":"5396","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueSkill, Assembly-CSharp","BaseStat":{"$ref":"5394"},"ClassSkill":{"$id":"5397","m_Count":0},"Type":"SkillPerception","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},{"$id":"5398","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueSkill, Assembly-CSharp","BaseStat":{"$ref":"5394"},"ClassSkill":{"$id":"5399","m_Count":0},"Type":"SkillLoreNature","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},{"$id":"5400","$type":"Kingmaker.EntitySystem.Stats.ModifiableValueSkill, Assembly-CSharp","BaseStat":{"$ref":"5394"},"ClassSkill":{"$id":"5401","m_Count":0},"Type":"SkillLoreReligion","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null}],"m_DependentFacts":null,"PermanentValue":10,"PersistentModifierList":null},"Type":"SaveWill","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},"SkillMobility":{"$ref":"5378"},"SkillAthletics":{"$id":"5402","BaseStat":{"$id":"5403","m_Disabled":{"$id":"5404","m_Count":0},"Type":"Strength","m_BaseValue":10,"m_Dependents":[{"$ref":"5402"}],"m_DependentFacts":null,"PermanentValue":10,"PersistentModifierList":null},"ClassSkill":{"$id":"5405","m_Count":0},"Type":"SkillAthletics","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},"SkillKnowledgeArcana":{"$ref":"5389"},"SkillLoreNature":{"$ref":"5398"},"SkillPerception":{"$ref":"5396"},"SkillThievery":{"$ref":"5380"},"Strength":{"$ref":"5403"},"Wisdom":{"$ref":"5394"},"Initiative":{"$ref":"5385"},"SkillPersuasion":{"$ref":"5363"},"SkillStealth":{"$ref":"5382"},"SkillUseMagicDevice":{"$ref":"5368"},"SkillLoreReligion":{"$ref":"5400"},"SkillKnowledgeWorld":{"$ref":"5391"},"CheckBluff":{"$ref":"5365"},"CheckDiplomacy":{"$ref":"5366"},"CheckIntimidate":{"$ref":"5367"},"SneakAttack":{"$id":"5406","Type":"SneakAttack","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":null},"Reach":{"$id":"5407","Type":"Reach","m_BaseValue":0,"m_Dependents":null,"m_DependentFacts":null,"PermanentValue":0,"PersistentModifierList":[{"$id":"5408","ModDescriptor":"Size","StackMode":"Default","ModValue":5,"Source":null,"SourceComponent":null,"ItemSource":null}]}}`;
@@ -238,6 +375,10 @@ export class AppComponent {
     this.filename = fileNames[0];
     var data = this.fs.readFileSync(this.filename, 'binary');
     this.zipfile = new this.zip(data);
+    var headerString = this.zipfile.files['header.json'].asText();
+    if (headerString.charCodeAt(0) == 65279)
+    headerString = headerString.substring(1);
+    this.header = this.resolveReferences(headerString);
     var partyString = this.zipfile.files['party.json'].asText();
     if (partyString.charCodeAt(0) == 65279)
       partyString = partyString.substring(1);
@@ -251,12 +392,6 @@ export class AppComponent {
     window['blueprints'] = Blueprints;
     //this.ref.markForCheck();
     this.ref.detectChanges();
-<<<<<<< HEAD
-    window['party'] = this.party;
-    window['app'] = this;
-=======
-
->>>>>>> Blueprints
   }
 
   resolveReferences(json) {
@@ -299,5 +434,22 @@ export class AppComponent {
       // Notice that this throws if you put in a reference at top-level
     }
     return json;
+  }
+  getPathsById(parent, id, path?, results?, seen?){
+    if(seen == null) seen = [parent];
+    if(results == null) results = [];
+    if(path == null) path = "";
+    for(let key in parent){
+      let child = parent[key];
+      let childPath = path == '' ? key : path + "." + key;
+      if(typeof child !== 'object' || !child) continue; //a primitive
+      if('$id' in child && child.$id == id){   
+        results.push(childPath);
+      }
+      if(seen.indexOf(child) >= 0) continue;
+      seen.push(child);
+      this.getPathsById(child, id, childPath, results, seen);
+    }
+    return results;
   }
 }

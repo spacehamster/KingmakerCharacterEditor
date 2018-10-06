@@ -128,7 +128,14 @@ let Features = {
 	"f74c6bdf5c5f5374fb9302ecdc1f7d64":"Skill Focus - Perception",
 	"f864101ab0cdb4b418c7d62d2b24eee5":"Ability Focus - Bombs",
 	"fd30c69417b434d47b6b03b9c1f568ff":"Selective Channel",	
+	"576933720c440aa4d8d42b0c54b77e80":"Demoralize (Persuasion) or Evasion",
+	"c074a5d615200494b8f2a9c845799d93":"Demoralize (Persuasion) or Evasion"
 };
+let Progressions = {
+	"5b72dd2ca2cb73b49903806ee8986325":"Rogue",
+	"b57b2a75a5abcaf47a01cf84672b50e9":"Rogue",
+	"b50e94b57be32f74892f381ae2a8905a":"Fighter"
+}
 let Classes = {
 	'48ac8db94d5de7645906c7d0ad3bcfbd':'Fighter',
 	'772c83a25e2268e448e841dcd548235f':'Bard',
@@ -261,9 +268,9 @@ let ArmorColors = [
 	'Grey1', 'Grey2', 'Grey3', 'Grey4', 'Grey5',
 ]
 let ColorKeys = {
-	'3709387ae978dae4d8ab60700a1e25e2':'Armor',
-	'db2f0f4384784974ba2428c96b21aa4e':'Armor',
-	'7667972f03e25494cb6b39ba7e82126f':'Armor',
+	'3709387ae978dae4d8ab60700a1e25e2':'Alchemist',
+	'db2f0f4384784974ba2428c96b21aa4e':'Alchemist',
+	'7667972f03e25494cb6b39ba7e82126f':'Alchemist',
 	'9de0a2db83f2dc3489781466970aa10c':'Human Male SkinColor',
 	'632957a5e5d53884692a74e01e6378bd':'Human Male SkinColor',
 	'd37eb08d7aa2bce4d8cd3e807e185b12':'Human Male HairColor',
@@ -281,6 +288,7 @@ let Blueprints = {
 	Portraits : Portraits,
 	Doll : Doll,
 	ColorKeys : ColorKeys,
-	ArmorColors : ArmorColors
+	ArmorColors : ArmorColors,
+	Voices:Voices,
 }
 export { Blueprints };
