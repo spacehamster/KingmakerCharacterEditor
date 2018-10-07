@@ -263,8 +263,10 @@ export class AppComponent {
   getProgressions(character)  {
     let results = [];
     for(let kv of character.Descriptor.Progression.m_Progressions){
-        let blueprintHash = kv.Value.Blueprint;
-        results.push(this.getFeatByBlueprint(blueprintHash));
+      let value = kv.Value.Blueprint in Blueprints.Progressions ? Blueprints.Progressions[kv.Value.Blueprint] : kv.Value.Blueprint;
+      value += ' - ' + kv.Value.Level;
+      if(kv.Value.Archtypes) value += ' - ' + kv.Value.Archtypes;
+      results.push(value);
     }
     return results;
   }
