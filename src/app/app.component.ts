@@ -221,6 +221,7 @@ export class AppComponent {
     for(let entry of character.Descriptor.Doll.EquipmentEntityIds ){
       results.push(entry in Blueprints.Doll ? Blueprints.Doll[entry] : entry);
     }
+    results.push('RacePreset: ' + character.Descriptor.Doll.RacePreset);
     for(let kv of character.Descriptor.Doll.EntityRampIdices ){
       let key = kv.Key in Blueprints.ColorKeys ? Blueprints.ColorKeys[kv.Key] : kv.Key;
       results.push('Prim: ' + key + ' : ' + kv.Value);
