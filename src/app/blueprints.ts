@@ -1,6 +1,7 @@
 import { Features } from './blueprint_features';
 import { Items } from './blueprint_items';
 import { Progressions } from './blueprint_progressions';
+import { KingdomEvents } from './blueprint_kingdom_events';
 let Classes = {
   "0937bec61c0dabc468428f496580c721":"Alchemist",
   "f7d7eb166b3dd594fb330d085df41853":"Barbarian",
@@ -378,5 +379,6 @@ let Blueprints = {
   ColorKeys : ColorKeys,
   ArmorColors : ArmorColors,
   Voices:Voices,
+  KingdomEvents: KingdomEvents
 }
 export { Blueprints };

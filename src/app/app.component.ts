@@ -141,6 +141,43 @@ export class AppComponent {
     }
     return true;
   }
+  getKingdomEvents(){
+    let results = [];
+    if(!this.player.Kingdom) return results;
+    results.push('FINISHED');
+    for(let event of this.player.Kingdom.FinishedEvents){
+      let name = event.Event in Blueprints.KingdomEvents ? Blueprints.KingdomEvents[event.Event] : event.Event;
+      let result = "" + event.SolveResults;
+      let resultFinal = "" + event.SolveResultsFinal;
+      results.push(name + ' - Result ' + result + ' - resultFinal ' + resultFinal);
+    }
+    results.push('HISTORY');
+    for(let event of this.player.Kingdom.EventHistory){
+      let name = event.Event in Blueprints.KingdomEvents ? Blueprints.KingdomEvents[event.Event] : event.Event;
+      let result = "" + event.SolveResults;
+      let resultFinal = "" + event.SolveResultsFinal;
+      results.push(name + ' - Result ' + result + ' - resultFinal ' + resultFinal);
+    }
+    results.push('ACTIVE');
+    for(let activeEvent of this.player.Kingdom.ActiveEvents){
+      let event = activeEvent.m_HistoryEntry;
+      let name = event.Event in Blueprints.KingdomEvents ? Blueprints.KingdomEvents[event.Event] : event.Event;
+      let result = "" + event.SolveResults;
+      let resultFinal = "" + event.SolveResultsFinal;
+      results.push(name + ' - StartedOn  ' + activeEvent.m_StartedOn + ' - Result ' + result + ' - resultFinal ' + resultFinal);
+    }
+    results.push('TASKS');
+    for(let task of this.player.Kingdom.ActiveTasks){
+      let activeEvent = task.Event;
+      let event = activeEvent.m_HistoryEntry;
+      let name = event.Event in Blueprints.KingdomEvents ? Blueprints.KingdomEvents[event.Event] : event.Event;
+      let result = "" + event.SolveResults;
+      let resultFinal = "" + event.SolveResultsFinal;
+      results.push(task.Name + ' - ' + name + ' - StartedOn  ' + task.StartedOn + 
+        ' - Result ' + result + ' - resultFinal ' + resultFinal);
+    }
+    return results;
+  }
   compareFiles(){
     this.loadFiles((saveFiles) => {
       let filters = [

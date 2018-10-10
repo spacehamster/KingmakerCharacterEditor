@@ -46,4 +46,9 @@ Money: <input type="number" [(ngModel)]="player.Money">
   <li *ngFor="let item of getItems()">
     {{ item.name }} - {{ item.count }}
   </li>
+  <br/>
+  Kingdom Events
+  <li *ngFor="let event of getKingdomEvents()">
+    {{ event }}
+  </li>
 </ul>
